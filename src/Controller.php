@@ -17,13 +17,8 @@ class Controller
             ->whereInstanceOf(SelectPlus::class)
             ->findFieldByAttribute($relationship);
 
-        $withTrashed = $this->shouldIncludeTrashed(
-            $request, $associatedResource = $field->resourceClass
-        );
-
         /** @var Builder $model */
-        $query = $field->buildAttachableQuery($request, $withTrashed);
-//        $query = $field->relationshipResource::newModel()->newModelQuery();
+        $query = $field->buildAttachableQuery($request);
 
         if ($field->ajaxSearchable !== null && $request->has('search')) {
             $search = $request->get('search');
