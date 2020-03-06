@@ -14,22 +14,26 @@ class Controller
         /** @var SelectPlus $field */
         $field = $request->newResource()
             ->availableFields($request)
-            ->where('component', 'select-plus')
-            ->where('attribute', $relationship)
-            ->first();
+            ->whereInstanceOf(SelectPlus::class)
+            ->findFieldByAttribute($relationship);
+
+        $withTrashed = $this->shouldIncludeTrashed(
+            $request, $associatedResource = $field->resourceClass
+        );
 
         /** @var Builder $model */
-        $query = $field->relationshipResource::newModel()->newModelQuery();
+        $query = $field->buildAttachableQuery($request, $withTrashed);
+//        $query = $field->relationshipResource::newModel()->newModelQuery();
 
         if ($field->ajaxSearchable !== null && $request->has('search')) {
             $search = $request->get('search');
-            
+
             if (is_callable($field->ajaxSearchable)) {
                 $return = call_user_func($field->ajaxSearchable, $search, $query);
 
                 if ($return instanceof Builder) {
                     $query = $return;
-                }                
+                }
             } elseif (is_string($field->ajaxSearchable)) {
                 $query->where($field->ajaxSearchable, 'LIKE', "%{$search}%");
             } elseif ($field->ajaxSearchable === true) {

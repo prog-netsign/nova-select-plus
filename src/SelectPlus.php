@@ -6,12 +6,14 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Str;
+use Laravel\Nova\Contracts\RelatableField;
 use Laravel\Nova\Fields\Field;
 use Laravel\Nova\Fields\ResourceRelationshipGuesser;
 use Laravel\Nova\Http\Requests\NovaRequest;
 use Laravel\Nova\Resource;
+use Laravel\Nova\TrashedStatus;
 
-class SelectPlus extends Field
+class SelectPlus extends Field implements RelatableField
 {
     public $component = 'select-plus';
 
@@ -177,6 +179,59 @@ class SelectPlus extends Field
         };
     }
 
+    /**
+     * Build an attachable query for the field.
+     *
+     * @param \Laravel\Nova\Http\Requests\NovaRequest $request
+     * @param bool $withTrashed
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function buildAttachableQuery(NovaRequest $request, $withTrashed = false)
+    {
+        $model = forward_static_call([$resourceClass = $this->resourceClass, 'newModel']);
+
+        $query = $request->first === 'true'
+            ? $model->newQueryWithoutScopes()->whereKey($request->current)
+            : $resourceClass::buildIndexQuery(
+                $request, $model->newQuery(), $request->search,
+                [], [], TrashedStatus::fromBoolean($withTrashed)
+            );
+
+        return $query->tap(function ($query) use ($request, $model) {
+            forward_static_call($this->attachableQueryCallable($request, $model), $request, $query);
+        });
+    }
+
+    /**
+     * Get the attachable query method name.
+     *
+     * @param \Laravel\Nova\Http\Requests\NovaRequest $request
+     * @param \Illuminate\Database\Eloquent\Model $model
+     * @return array
+     */
+    protected function attachableQueryCallable(NovaRequest $request, $model)
+    {
+        return ($method = $this->attachableQueryMethod($request, $model))
+            ? [$request->resource(), $method]
+            : [$this->resourceClass, 'relatableQuery'];
+    }
+
+    /**
+     * Get the attachable query method name.
+     *
+     * @param \Laravel\Nova\Http\Requests\NovaRequest $request
+     * @param \Illuminate\Database\Eloquent\Model $model
+     * @return string
+     */
+    protected function attachableQueryMethod(NovaRequest $request, $model)
+    {
+        $method = 'relatable' . Str::plural(class_basename($model));
+
+        if (method_exists($request->resource(), $method)) {
+            return $method;
+        }
+    }
+
     public function mapToSelectionValue(Collection $models)
     {
         return $models->map(function (Model $model) {
@@ -191,13 +246,13 @@ class SelectPlus extends Field
     public function jsonSerialize()
     {
         return array_merge(parent::jsonSerialize(), [
-            'label'                    => $this->label,
-            'ajax_searchable'          => $this->ajaxSearchable !== null,
-            'relationship_name'        => $this->attribute,
-            'value_for_index_display'  => $this->valueForIndexDisplay,
+            'label' => $this->label,
+            'ajax_searchable' => $this->ajaxSearchable !== null,
+            'relationship_name' => $this->attribute,
+            'value_for_index_display' => $this->valueForIndexDisplay,
             'value_for_detail_display' => $this->valueForDetailDisplay,
-            'max_selections'           => $this->maxSelections,
-            'reorderable'              => $this->reorderable !== null
+            'max_selections' => $this->maxSelections,
+            'reorderable' => $this->reorderable !== null
         ]);
     }
 }
